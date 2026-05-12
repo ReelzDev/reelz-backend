@@ -1,27 +1,13 @@
 require('dotenv').config();
-const { Pool } = require('pg');
-
-// ✔️ تحقق من وجود DATABASE_URL
-if (!process.env.DATABASE_URL) {
-  throw new Error('❌ DATABASE_URL is missing');
-}
-
-// ✔️ اتصال آمن عبر Railway
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl:
-    process.env.NODE_ENV === 'production'
-      ? { rejectUnauthorized: false }
-      : false,
-});
+const db = require('./db');
 
 const migrate = async () => {
-  const client = await pool.connect();
+  const client = await db.getClient();
 
   try {
     await client.query('BEGIN');
 
-    // ── USERS ─────────────────────────────────────────────
+    // ── USERS ─────────────────────────────────────────────────
     await client.query(`
       CREATE TABLE IF NOT EXISTS users (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -44,7 +30,7 @@ const migrate = async () => {
       );
     `);
 
-    // ── VIDEOS ────────────────────────────────────────────
+    // ── VIDEOS ────────────────────────────────────────────────
     await client.query(`
       CREATE TABLE IF NOT EXISTS videos (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -55,8 +41,8 @@ const migrate = async () => {
         hls_url TEXT,
         thumbnail_url TEXT,
         duration_seconds INTEGER DEFAULT 0,
-        category VARCHAR(20),
-        type VARCHAR(20),
+        category VARCHAR(20) CHECK (category IN ('learn','earn','entertain','local')),
+        type VARCHAR(20) CHECK (type IN ('educational','profitable','experience')),
         product_link TEXT,
         course_link TEXT,
         country VARCHAR(10) DEFAULT 'IQ',
@@ -71,7 +57,27 @@ const migrate = async () => {
       );
     `);
 
-    // ── COMMENTS ──────────────────────────────────────────
+    // ── VIDEO LIKES ───────────────────────────────────────────
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS video_likes (
+        user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+        video_id UUID REFERENCES videos(id) ON DELETE CASCADE,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        PRIMARY KEY (user_id, video_id)
+      );
+    `);
+
+    // ── VIDEO SAVES ───────────────────────────────────────────
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS video_saves (
+        user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+        video_id UUID REFERENCES videos(id) ON DELETE CASCADE,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        PRIMARY KEY (user_id, video_id)
+      );
+    `);
+
+    // ── COMMENTS ──────────────────────────────────────────────
     await client.query(`
       CREATE TABLE IF NOT EXISTS comments (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -84,27 +90,7 @@ const migrate = async () => {
       );
     `);
 
-    // ── VIDEO LIKES ───────────────────────────────────────
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS video_likes (
-        user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-        video_id UUID REFERENCES videos(id) ON DELETE CASCADE,
-        created_at TIMESTAMPTZ DEFAULT NOW(),
-        PRIMARY KEY (user_id, video_id)
-      );
-    `);
-
-    // ── VIDEO SAVES ───────────────────────────────────────
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS video_saves (
-        user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-        video_id UUID REFERENCES videos(id) ON DELETE CASCADE,
-        created_at TIMESTAMPTZ DEFAULT NOW(),
-        PRIMARY KEY (user_id, video_id)
-      );
-    `);
-
-    // ── FOLLOWS ───────────────────────────────────────────
+    // ── FOLLOWS ───────────────────────────────────────────────
     await client.query(`
       CREATE TABLE IF NOT EXISTS follows (
         follower_id UUID REFERENCES users(id) ON DELETE CASCADE,
@@ -114,12 +100,36 @@ const migrate = async () => {
       );
     `);
 
-    // ── NOTIFICATIONS ─────────────────────────────────────
+    // ── POINTS TRANSACTIONS ───────────────────────────────────
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS points_transactions (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        reason VARCHAR(50) NOT NULL,
+        points INTEGER NOT NULL,
+        meta JSONB DEFAULT '{}',
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+
+    // ── VIDEO VIEWS ───────────────────────────────────────────
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS video_views (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        video_id UUID NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
+        user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+        watched_seconds INTEGER DEFAULT 0,
+        completed BOOLEAN DEFAULT false,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+
+    // ── NOTIFICATIONS ─────────────────────────────────────────
     await client.query(`
       CREATE TABLE IF NOT EXISTS notifications (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-        type VARCHAR(50),
+        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        type VARCHAR(50) NOT NULL,
         title VARCHAR(200),
         body TEXT,
         data JSONB DEFAULT '{}',
@@ -128,21 +138,23 @@ const migrate = async () => {
       );
     `);
 
-    // ── INDEXES ───────────────────────────────────────────
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_videos_user ON videos(user_id);`);
+    // ── INDEXES ───────────────────────────────────────────────
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_videos_user_id ON videos(user_id);`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_videos_category ON videos(category);`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_videos_country ON videos(country);`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_videos_created ON videos(created_at DESC);`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_comments_video ON comments(video_id);`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, is_read);`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_points_user ON points_transactions(user_id);`);
 
     await client.query('COMMIT');
-
-    console.log('✅ Migration completed successfully!');
+    console.log('✅ All tables created successfully!');
   } catch (err) {
     await client.query('ROLLBACK');
     console.error('❌ Migration failed:', err);
   } finally {
     client.release();
-    await pool.end();
+    process.exit(0);
   }
 };
 
