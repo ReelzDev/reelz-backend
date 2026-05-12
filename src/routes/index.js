@@ -1,32 +1,50 @@
-require('dotenv').config();
 const express = require('express');
-const cors = require('cors');
-const helmet = require('helmet');
-const morgan = require('morgan');
-const compression = require('compression');
+const multer = require('multer');
+const router = express.Router();
 
-const app = express();
+const { authMiddleware, optionalAuth } = require('../middleware/auth');
+const { firebaseAuth, updateInterests, getMe } = require('../controllers/authController');
+const { getFeed, getTrending, getVideo, recordView, toggleLike, toggleSave, uploadVideo, deleteVideo } = require('../controllers/videoController');
+const { getComments, addComment, deleteComment } = require('../controllers/commentController');
+const { getProfile, updateProfile, toggleFollow, getMyPoints, getCreatorStats } = require('../controllers/userController');
+const { getNotifications, getUnreadCount } = require('../controllers/notificationController');
+const { search, getTrendingKeywords } = require('../controllers/searchController');
 
-// ── Middlewares ─────────────────────────────
-app.use(cors());
-app.use(helmet());
-app.use(morgan('dev'));
-app.use(compression());
-app.use(express.json());
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 500 * 1024 * 1024 } });
 
-// ── Routes ───────────────────────────────────
-const apiRoutes = require('./routes'); // تأكد هذا المسار صحيح عندك
+// AUTH
+router.post('/auth/firebase', firebaseAuth);
+router.put('/auth/interests', authMiddleware, updateInterests);
+router.get('/auth/me', authMiddleware, getMe);
 
-app.use('/api', apiRoutes);
+// VIDEOS
+router.get('/videos/feed', authMiddleware, getFeed);
+router.get('/videos/trending', optionalAuth, getTrending);
+router.get('/videos/:id', optionalAuth, getVideo);
+router.post('/videos/:id/view', optionalAuth, recordView);
+router.post('/videos/:id/like', authMiddleware, toggleLike);
+router.post('/videos/:id/save', authMiddleware, toggleSave);
+router.post('/videos', authMiddleware, upload.fields([{ name: 'video', maxCount: 1 }, { name: 'thumbnail', maxCount: 1 }]), uploadVideo);
+router.delete('/videos/:id', authMiddleware, deleteVideo);
 
-// ── Health Check ─────────────────────────────
-app.get('/', (req, res) => {
-  res.status(200).send('🚀 Reelz API is running');
-});
+// COMMENTS
+router.get('/videos/:videoId/comments', optionalAuth, getComments);
+router.post('/videos/:videoId/comments', authMiddleware, addComment);
+router.delete('/comments/:id', authMiddleware, deleteComment);
 
-// ── Server ───────────────────────────────────
-const PORT = process.env.PORT || 3000;
+// USERS
+router.get('/users/me/points', authMiddleware, getMyPoints);
+router.get('/users/me/creator-stats', authMiddleware, getCreatorStats);
+router.put('/users/me', authMiddleware, updateProfile);
+router.get('/users/:username', optionalAuth, getProfile);
+router.post('/users/:id/follow', authMiddleware, toggleFollow);
 
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 Running on port ${PORT}`);
-});
+// NOTIFICATIONS
+router.get('/notifications', authMiddleware, getNotifications);
+router.get('/notifications/unread-count', authMiddleware, getUnreadCount);
+
+// SEARCH
+router.get('/search', optionalAuth, search);
+router.get('/search/trending', getTrendingKeywords);
+
+module.exports = router;
