@@ -1,10 +1,18 @@
 require('dotenv').config();
 const { Pool } = require('pg');
 
-// ✔️ اتصال واحد فقط عبر DATABASE_URL (مهم جدًا)
+// ✔️ تحقق من وجود DATABASE_URL
+if (!process.env.DATABASE_URL) {
+  throw new Error('❌ DATABASE_URL is missing');
+}
+
+// ✔️ اتصال آمن عبر Railway
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false }
+  ssl:
+    process.env.NODE_ENV === 'production'
+      ? { rejectUnauthorized: false }
+      : false,
 });
 
 const migrate = async () => {
@@ -76,7 +84,7 @@ const migrate = async () => {
       );
     `);
 
-    // ── LIKES ─────────────────────────────────────────────
+    // ── VIDEO LIKES ───────────────────────────────────────
     await client.query(`
       CREATE TABLE IF NOT EXISTS video_likes (
         user_id UUID REFERENCES users(id) ON DELETE CASCADE,
@@ -86,7 +94,7 @@ const migrate = async () => {
       );
     `);
 
-    // ── SAVES ─────────────────────────────────────────────
+    // ── VIDEO SAVES ───────────────────────────────────────
     await client.query(`
       CREATE TABLE IF NOT EXISTS video_saves (
         user_id UUID REFERENCES users(id) ON DELETE CASCADE,
@@ -128,14 +136,13 @@ const migrate = async () => {
 
     await client.query('COMMIT');
 
-    console.log('✅ All tables created successfully!');
+    console.log('✅ Migration completed successfully!');
   } catch (err) {
     await client.query('ROLLBACK');
     console.error('❌ Migration failed:', err);
   } finally {
     client.release();
     await pool.end();
-    process.exit(0);
   }
 };
 
