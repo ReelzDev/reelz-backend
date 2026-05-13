@@ -1,0 +1,61 @@
+name: reelz
+description: Short video app focused on learning, earning, and opportunity.
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Navigation & State
+  go_router: ^13.0.0
+  flutter_riverpod: ^2.5.1
+
+  # Networking
+  dio: ^5.4.3
+  http: ^1.2.1
+
+  # Supabase 🔥
+  supabase_flutter: ^2.5.6
+
+  # Storage
+  shared_preferences: ^2.2.3
+  flutter_secure_storage: ^9.0.0
+
+  # UI / Images
+  cached_network_image: ^3.3.1
+  shimmer: ^3.0.0
+  flutter_animate: ^4.5.0
+  intl: ^0.19.0
+  timeago: ^3.6.1
+
+  # Utils
+  uuid: ^4.4.0
+  permission_handler: ^11.3.1
+
+  # Media
+  image_picker: ^1.1.2
+  video_player: ^2.8.6
+
+  # Auth (Google + Firebase للإشعارات فقط)
+  google_sign_in: ^6.2.1
+  firebase_auth: ^4.19.4
+  firebase_core: ^2.31.0
+  firebase_messaging: ^14.7.10
+  flutter_local_notifications: ^17.0.0
+
+  cupertino_icons: ^1.0.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/
+    - assets/icons/
